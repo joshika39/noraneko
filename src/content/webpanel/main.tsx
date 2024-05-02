@@ -1,4 +1,4 @@
-import type {} from "../../components/solid-xul/jsx-runtime";
+import type {} from "@solid-xul/jsx-runtime";
 import { render } from "@solid-xul/solid-xul.ts";
 
 const init = async () => {
