@@ -1,25 +1,78 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { ZSTDDecoder } from "zstddec";
+import {ZSTDDecoder} from "zstddec";
 import decompress from "decompress";
 import fg from "fast-glob";
 import autoprefixer from "autoprefixer";
 import postcss from "postcss";
 import postcssNested from "postcss-nested";
 import postcssSorting from "postcss-sorting";
-import chikodar from "chokidar";
-import { build } from "vite";
+import chokidar from "chokidar";
+import {build} from "vite";
 import solidPlugin from "vite-plugin-solid";
-import unocssPlugin from "unocss/vite";
+import unoCssPlugin from "unocss/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import * as swc from "@swc/core";
+import puppeteer from "puppeteer-core";
+import {exit} from "node:process";
 
-import { injectManifest } from "./scripts/injectmanifest.js";
-import { injectXHTML } from "./scripts/injectxhtml.js";
+import {injectManifest} from "./scripts/injectmanifest.js";
+import {injectXHTML} from "./scripts/injectxhtml.js";
+
+//import { remote } from "webdriverio";
+
+const VERSION = "000";
 
 const r = (/** @type {string} */ dir) => {
   return path.resolve(import.meta.dirname, dir);
 };
+
+/**
+ * Writes to a file with replacements
+ * @param {string} filePath the path to write to
+ * @param {Record<string, string>} replacements the replacements to make
+ * @returns {Promise<void>}
+ */
+async function writeToDir(filePath, replacements) {
+  const output = await swc.transformFile(filePath, {
+    jsc: {
+      parser: {
+        syntax: "typescript",
+        decorators: true,
+        // ParserConfig declaration: export type ParserConfig = TsParserConfig | EsParserConfig;
+        // @ts-ignore: importAssertions is not in the TsParserConfig, it is in the EsParserConfig
+        importAssertions: true,
+        dynamicImport: true,
+      },
+      target: "esnext",
+    },
+    sourceMaps: true,
+  });
+
+  let outPath = filePath
+  for (const [key, value] of Object.entries(replacements)) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    outPath = outPath.replace(key, value);
+  }
+
+  const outDir = path.dirname(outPath);
+  try {
+    await fs.access(outDir);
+  } catch {
+    await fs.mkdir(outDir, {recursive: true});
+  }
+  await fs.writeFile(
+    outPath,
+    output.code +
+    "\n//# sourceMappingURL= " +
+    path.relative(path.dirname(outPath), outPath + ".map"),
+  );
+  if (output.map) {
+    await fs.writeFile(`${outPath}.map`, output.map);
+  }
+}
 
 async function compile() {
   await build({
@@ -55,7 +108,7 @@ async function compile() {
 
     plugins: [
       tsconfigPaths(),
-      unocssPlugin(),
+      unoCssPlugin(),
       solidPlugin({
         solid: {
           generate: "universal",
@@ -106,39 +159,16 @@ async function compile() {
   }
 
   //swc / compile modules
-  await fg.glob("src/modules/**/*", { onlyFiles: true }).then((paths) => {
+  await fg.glob("src/modules/**/*", {onlyFiles: true}).then((paths) => {
     const listPromise = [];
     for (const filepath of paths) {
       const promise = (async () => {
-        const output = await swc.transformFile(filepath, {
-          jsc: {
-            parser: {
-              syntax: "typescript",
-              decorators: true,
-              importAssertions: true,
-              dynamicImport: true,
-            },
-            target: "esnext",
-          },
-          sourceMaps: true,
-        });
-        const outpath = filepath
-          .replace("src/modules/", "dist/noraneko/resource/modules/")
-          .replace(".ts", ".js")
-          .replace(".mts", ".mjs");
-        const outdir = path.dirname(outpath);
-        try {
-          await fs.access(outdir);
-        } catch {
-          await fs.mkdir(outdir, { recursive: true });
+        const replacements = {
+          "src/modules/": "dist/noraneko/resource/modules/",
+          ".ts": ".js",
+          ".mts": ".mjs",
         }
-        await fs.writeFile(
-          outpath,
-          output.code +
-            "\n//# sourceMappingURL= " +
-            path.relative(path.dirname(outpath), outpath + ".map"),
-        );
-        await fs.writeFile(`${outpath}.map`, output.map);
+        await writeToDir(filepath, replacements);
       })();
       listPromise.push(promise);
     }
@@ -147,43 +177,17 @@ async function compile() {
 
   //swc / compile modules
   await fg
-    .glob("src/private/browser/components/**/*", { onlyFiles: true })
+    .glob("src/private/browser/components/**/*", {onlyFiles: true})
     .then((paths) => {
       const listPromise = [];
       for (const filepath of paths) {
         const promise = (async () => {
-          const output = await swc.transformFile(filepath, {
-            jsc: {
-              parser: {
-                syntax: "typescript",
-                decorators: true,
-                importAssertions: true,
-                dynamicImport: true,
-              },
-              target: "esnext",
-            },
-            sourceMaps: true,
-          });
-          const outpath = filepath
-            .replace(
-              "src/private/browser/components/",
-              "dist/noraneko/private/resource/modules/",
-            )
-            .replace(".ts", ".js")
-            .replace(".mts", ".mjs");
-          const outdir = path.dirname(outpath);
-          try {
-            await fs.access(outdir);
-          } catch {
-            await fs.mkdir(outdir, { recursive: true });
+          const replacements = {
+            "src/private/browser/components/": "dist/noraneko/private/resource/modules/",
+            ".ts": ".js",
+            ".mts": ".mjs",
           }
-          await fs.writeFile(
-            outpath,
-            output.code +
-              "\n//# sourceMappingURL= " +
-              path.relative(path.dirname(outpath), outpath + ".map"),
-          );
-          await fs.writeFile(`${outpath}.map`, output.map);
+          await writeToDir(filepath, replacements);
         })();
         listPromise.push(promise);
       }
@@ -193,12 +197,6 @@ async function compile() {
   // await fs.cp("public", "dist", { recursive: true });
 }
 
-//import { remote } from "webdriverio";
-import puppeteer from "puppeteer-core";
-import { exit } from "node:process";
-
-const VERSION = "000";
-
 async function run() {
   await compile();
   try {
@@ -207,8 +205,8 @@ async function run() {
     if (
       VERSION !== (await fs.readFile("dist/bin/nora.version.txt")).toString()
     ) {
-      await fs.rm("dist/bin", { recursive: true });
-      await fs.mkdir("dist/bin", { recursive: true });
+      await fs.rm("dist/bin", {recursive: true});
+      await fs.mkdir("dist/bin", {recursive: true});
       throw "have to decompress";
     }
   } catch {
@@ -236,18 +234,20 @@ async function run() {
     try {
       await fs.access("dist/profile/test");
       await fs.rm("dist/profile/test");
-    } catch {}
+    } catch {
+    }
     // https://searchfox.org/mozilla-central/rev/b4a96f411074560c4f9479765835fa81938d341c/toolkit/xre/nsAppRunner.cpp#1514
     // 可能性はある、まだ必要はない
-  } catch {}
+  } catch {
+  }
 
   let browser = null;
   let watch_running = false;
 
   let intended_close = false;
 
-  const watcher = chikodar
-    .watch("src", { persistent: true })
+  const watcher = chokidar
+    .watch("src", {persistent: true})
     .on("all", async (ev, path, stat) => {
       if (watch_running) return;
       watch_running = true;
@@ -275,6 +275,7 @@ async function run() {
     if (!intended_close) exit();
   });
 }
+
 // run
 if (process.argv[2] && process.argv[2] === "--run") {
   run();
