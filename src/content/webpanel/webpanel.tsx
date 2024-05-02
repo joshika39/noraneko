@@ -1,5 +1,5 @@
 import type {} from "../../components/solid-xul/jsx-runtime";
-import { insertNode, render } from "../../components/solid-xul/solid-xul";
+import {insertNode, render} from "../../components/solid-xul/solid-xul";
 
 export function webpanel(webpanelId: string, src: string) {
   return (
@@ -56,7 +56,7 @@ export function webpanel2browser(
     //   src="https://google.com"
     //   // onDidChangeBrowserRemoteness={onDidChangeBrowserRemoteness}
     // />
-    <iframe src="https://google.com" title="google" />
+    <iframe src="https://google.com" title="google"/>
     // <xul:browser
     //   id={id}
     //   contextmenu="contentAreaContextMenu"
@@ -108,21 +108,29 @@ export function addContextBox(
   );
 
   const menuItem = (
-    <xul:menuitem id={id} data-l10n-id={l10nId} onClick={onclick} />
+    <xul:menuitem id={id} data-l10n-id={l10nId} onClick={onclick}/>
   );
   const anchor = document.getElementById(anchorId);
 
   insertNode(contentAreaContextMenu, menuItem, anchor);
 
-  document
-    .getElementById("contentAreaContextMenu")
-    .addEventListener("popupshowing", (_ev) => {
-      document.getElementById(id).hidden = hideFunc();
-    });
+  const areaContextMenu = document.getElementById("contentAreaContextMenu");
 
-  document
-    .getElementById("contentAreaContextMenu")
-    .addEventListener("popuphiding", (_ev) => {
-      document.getElementById(id).hidden = hideFunc();
-    });
+  if (!areaContextMenu) {
+    return;
+  }
+
+  areaContextMenu.addEventListener("popupshowing", (_ev) => {
+    const contextMenu = document.getElementById(id);
+    if (contextMenu) {
+      contextMenu.hidden = hideFunc();
+    }
+  });
+
+  areaContextMenu.addEventListener("popuphiding", (_ev) => {
+    const contextMenu = document.getElementById(id);
+    if (contextMenu) {
+      contextMenu.hidden = false;
+    }
+  });
 }
