@@ -241,6 +241,7 @@ async function run() {
   } catch {
   }
 
+  //@ts-ignore
   let browser = null;
   let watch_running = false;
 
@@ -251,13 +252,14 @@ async function run() {
     .on("all", async (ev, path, stat) => {
       if (watch_running) return;
       watch_running = true;
+      //@ts-ignore
       if (browser) {
         console.log("Browser Restarting...");
         intended_close = true;
         await browser.close();
 
-        watcher.close();
-        run();
+        await watcher.close();
+        await run();
       }
       watch_running = false;
     });
